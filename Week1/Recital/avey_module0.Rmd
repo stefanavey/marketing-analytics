@@ -1,0 +1,149 @@
+---
+title: "Foundations of Marketing Analytics: Module 0: Introduction"
+author: "Stefan Avey"
+date: "2017-01-02"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    df_print: kable
+---
+
+
+```{r setup, eval = TRUE, echo = FALSE, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(lubridate)
+library(aveytoolkit)
+
+options(stringsAsFactors = FALSE)
+```
+
+# Load the Data
+
+```{r loadData}
+
+## Load data
+purchases <- read.delim("data/purchases.txt", header = FALSE)
+
+## Add column names
+colnames(purchases) <- c("customer_id", "purchase_amount", "date_of_purchase")
+
+head(data)
+summary(data)
+
+## Convert date and add column for purchase year
+purchases <- purchases %>%
+    mutate(date_of_purchase = ymd(date_of_purchase)) %>%
+    mutate(year_of_purchase = year(date_of_purchase))
+
+```
+
+# Explore the Data
+
+```{r summarizeData}
+
+plotDat <- purchases %>%
+    group_by(year_of_purchase) %>%
+    summarize(counter = n(),
+              avg_amount = mean(purchase_amount),
+              sum_amount = sum(purchase_amount),
+              med_amount = median(purchase_amount)) %>%
+    ungroup() %>%
+    arrange(year_of_purchase)
+
+````
+
+## How many purchases are made each year?
+
+```{r purchasesPerYear}
+
+ggplot(data = plotDat) +
+    geom_bar(stat = "identity", aes(x = year_of_purchase, y = counter)) +
+    scale_x_continuous(breaks = plotDat$year_of_purchase,
+                       labels = plotDat$year_of_purchase) +
+    xlab("Year") +
+    ylab("Purchases") +
+    getBaseTheme()
+
+```
+
+## How has the purchase amount changed over time?
+
+```{r purchaseAmtPerYear}
+
+ggplot(data = plotDat, aes(x = year_of_purchase, y = avg_amount)) +
+    geom_point() +
+    geom_line() +
+    scale_x_continuous(breaks = plotDat$year_of_purchase,
+                       labels = plotDat$year_of_purchase) +
+    scale_y_continuous(labels = scales::dollar) +
+    xlab("Year") +
+    ylab("Average Purchase Amount") +
+    getBaseTheme() +
+    theme(panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank())
+
+```
+
+```{r medPurchaseAmtPerYear}
+
+ggplot(data = plotDat, aes(x = year_of_purchase, y = med_amount)) +
+    geom_point() +
+    geom_line() +
+    scale_x_continuous(breaks = plotDat$year_of_purchase,
+                       labels = plotDat$year_of_purchase) +
+    scale_y_continuous(labels = scales::dollar) +
+    xlab("Year") +
+    ylab("Median Purchase Amount") +
+    getBaseTheme() +
+    theme(panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank())
+
+```
+
+```{r purchaseAmtPerYear2}
+
+lmod <- lm(data = plotDat %>% mutate(year = year_of_purchase - 2005),
+           sum_amount ~ year)
+ggplot(data = plotDat, aes(x = year_of_purchase, y = sum_amount)) +
+    geom_smooth(method = lm, color = "#3182bd", se = FALSE) +
+    geom_point() +
+    geom_line() +
+    annotate("text", x = 2008, y = 420000, color = "#3182bd",
+             label = GetEqn(lmod), parse = TRUE) +
+    scale_x_continuous(breaks = plotDat$year_of_purchase,
+                       labels = plotDat$year_of_purchase) +
+    scale_y_continuous(labels = scales::dollar) +
+    xlab("Year") +
+    ylab("Total Purchase Amount") +
+    getBaseTheme() +
+    theme(panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank()) +
+    ggtitle("Linear Growth in Total Purchase Amount")
+
+```
+
+## What is the purchase distribution each year?
+
+While looking at the number of purchases, average amount sold, and total amount sold are informative, it is helpful to explore the whole distribution of purchases per year.
+
+```{r distributions}
+
+ggplot(data = purchases, aes(x = year_of_purchase, y = purchase_amount)) +
+    geom_violin(aes(group = year_of_purchase)) +
+    scale_x_continuous(breaks = plotDat$year_of_purchase,
+                       labels = plotDat$year_of_purchase) +
+    scale_y_continuous(labels = scales::dollar) +
+    xlab("Year") +
+    ylab("Purchase Amount") +
+    getBaseTheme() +
+    theme(panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank())
+
+```
+
+# Conclusions
+
+- From 2005--2015, the total purchase ammount has increased linearly at a rate of approximately $37,000 / year
+- While the growth in total sales in 2005--2007 was due mainly to an increase in sales volume, the growth in 2012--2015 was due mainly to an increase in purchase amount.

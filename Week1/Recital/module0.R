@@ -11,7 +11,7 @@
 
 
 # Load text file into local variable called 'data'
-data = read.delim(file = 'purchases.txt', header = FALSE, sep = '\t', dec = '.')
+data = read.delim(file = 'data/purchases.txt', header = FALSE, sep = '\t', dec = '.')
 
 # Display what has been loaded
 head(data)
