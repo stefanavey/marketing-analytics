@@ -29,13 +29,14 @@ purchases <- read.delim("data/purchases.txt", header = FALSE)
 ## Add column names
 colnames(purchases) <- c("customer_id", "purchase_amount", "date_of_purchase")
 
-head(data)
-summary(data)
-
 ## Convert date and add column for purchase year
 purchases <- purchases %>%
     mutate(date_of_purchase = ymd(date_of_purchase)) %>%
     mutate(year_of_purchase = year(date_of_purchase))
+
+## Look at the data
+head(purchases)
+summary(purchases)
 
 ```
 
