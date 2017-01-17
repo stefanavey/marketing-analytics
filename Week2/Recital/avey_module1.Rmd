@@ -94,16 +94,25 @@ ggplot(data = plotDat, aes(x = recency / 365, y = monetary_value)) +
 
 ```{r segment}
 
-dat <- as.data.frame(plotDat)
-rownames(dat) <- plotDat$customer_id
-dat <- select(dat, -customer_id) %>%
-    mutate(recency = as.numeric(recency))
-dis <- dist(scale(dat))
+## Note: The example code uses log of purchase amount because of the skewed distribution. This makes it so that larger purchase amounts are not as different as on a linear scale. You can experiment with using the commented line below to see the difference in clustering.
+dat <- purchases %>%
+    group_by(customer_id) %>%
+    summarize(recency = as.numeric(min(recentDate - date_of_purchase)),
+              monetary_value = mean(purchase_amount),
+              ## monetary_value = mean(log10(purchase_amount)),
+              frequency = n()) %>%
+    as.data.frame()
 
+## Put customer_id in the rownames of dat
+rownames(dat) <- plotDat$customer_id
+dat <- select(dat, -customer_id)
+
+## Calculate distance matrix and hierarchical clustering
+dis <- dist(scale(dat))
 hc <- hclust(dis, method = "ward.D2")
 
 
-## Dendrogram
+## Plot the dendrogram
 plot(hc)
 abline(h = 50, col = "red")
 cuts <- cutree(hc, h = 50)
@@ -165,21 +174,28 @@ ggplot(data = plotDat3, aes(x = RFM_type, y = value, color = segment)) +
     scale_color_discrete(guide = FALSE) +
     theme(strip.text = element_text(size = 12, face = "bold"))
 
+## Summarize each segment by the median of each variable
+plotDat %>%
+    mutate(segment = cuts) %>%
+    group_by(segment) %>%
+    summarize(number = n(), median(frequency), median(recency), median(monetary_value)) %>%
+    as.data.frame()
+
 ```
 
 # Conclusions
 
 Using hierarchical clustering we were able to define 6 clear customer segments with definining characterstics.
 
-1. **Lost**
+1. **Cold**
    - These customers shopped at our store 1-5 times over 4 years ago and haven't been back.
-2. **Average Joes**
-   - These customers spend an average amount ($50 per purchase) and shop at an average frequency (4 - 8 transactions)
+2. **Almost Regulars**
+   - These customers spend a similar amount as the **Regulars** but don't buy as frequently (4 - 8 transactions)
 3. **Regulars**
    - These customers are regulars.  They have shopped at least 8 times (some as many as 40 times). They have all made a purchase in the past year though their monetary value varies widely.
-4. **Infrequent**
-   - Customers who have shopped 1 or 2 times in the past 4 years and spend about $20-$30 on average
-5. **Money Makers**
+4. **Average Joes**
+   - Customers who have shopped 1 or 2 times in the past 4 years and spend about $30 each time.
+5. **High End**
    - A small segment of 281 customers who have shopped 1-10 times (the majority have shopped in the past year) and spend around $500.
-6. **High Rollers**
-   - The smallest segment of 54 customers who don't shop frequently, but when they shop, they spend over $1,000 on average.
+6. **Money Items**
+   - The smallest segment of 54 customers who don't shop frequently, but when they shop, they spend close to $2,000.

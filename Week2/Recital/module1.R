@@ -11,7 +11,7 @@
 
 
 # Load text file into local variable called 'data'
-data = read.delim(file = 'purchases.txt', header = FALSE, sep = '\t', dec = '.')
+data = read.delim(file = 'data/purchases.txt', header = FALSE, sep = '\t', dec = '.')
 
 # Add headers and interpret the last column as a date, extract year of purchase
 colnames(data) = c('customer_id', 'purchase_amount', 'date_of_purchase')
@@ -88,6 +88,7 @@ plot(c)
 
 # Cut at 9 segments
 members = cutree(c, k = 9)
+abline(h = 16, col = "red")
 
 # Show 30 first customers, frequency table
 members[1:30]
@@ -95,4 +96,3 @@ table(members)
 
 # Show profile of each segment
 aggregate(customers_sample[, 2:4], by = list(members), mean)
-
