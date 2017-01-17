@@ -1,0 +1,185 @@
+---
+title: "Foundations of Marketing Analytics: Module 1: Statistical Segmentation"
+author: "Stefan Avey"
+date: "2017-01-16"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    df_print: kable
+---
+
+
+```{r setup, eval = TRUE, echo = FALSE, message = FALSE, warning = FALSE}
+
+library(tidyverse)
+library(lubridate)
+library(aveytoolkit)
+
+options(stringsAsFactors = FALSE)
+```
+
+# Load the Data
+
+```{r loadData}
+
+###############
+## Load data ##
+###############
+purchases <- read.delim("data/purchases.txt", header = FALSE)
+
+###################
+## Preprocessing ##
+###################
+## Add column names
+colnames(purchases) <- c("customer_id", "purchase_amount", "date_of_purchase")
+
+## Convert date and add column for purchase year
+purchases <- purchases %>%
+    mutate(date_of_purchase = ymd(date_of_purchase)) %>%
+    mutate(year_of_purchase = year(date_of_purchase))
+
+## Look at the data
+head(purchases)
+summary(purchases)
+
+```
+
+# Compute Recency, Frequency, and Monetary Value
+
+Three common characteristics of customers readily available from a transactional database are recency, frequency, and monetary value.
+
+1. *Recency*: Time since last purchase.
+2. *Frequency*: Number of purchases made in the past.
+3. *Monetary value*: Amount spent at each purchase occasion.
+
+Here we use these 3 simple characteristics to divide customers into actionable segments.
+
+```{r calcRFM}
+
+## Add columns for recency, frequency, and monetary value
+recentDate <- max(purchases$date_of_purchase)
+plotDat <- purchases %>%
+    group_by(customer_id) %>%
+    summarize(recency = min(recentDate - date_of_purchase),
+              frequency = n(),
+              monetary_value = mean(purchase_amount))
+
+######################################
+## Visually summarize these metrics ##
+######################################
+ggplot(data = plotDat, aes(x = frequency, y = monetary_value)) +
+    geom_point(alpha = 0.1) +
+    scale_y_log10(labels = scales::dollar) +
+    annotation_logticks(sides = "l") +
+    xlab("Purchase Frequency") +
+    ylab("Average Purchase Amount") +
+    getBaseTheme()
+
+
+ggplot(data = plotDat, aes(x = recency / 365, y = monetary_value)) +
+    geom_point(alpha = 0.1) +
+    ## geom_hex() +
+    scale_y_log10(labels = scales::dollar) +
+    annotation_logticks(sides = "l") +
+    xlab("Years Since Last Purchase (Recency)") +
+    ylab("Average Purchase Amount") +
+    getBaseTheme()
+
+
+```
+
+## Customer Segmentation
+
+```{r segment}
+
+dat <- as.data.frame(plotDat)
+rownames(dat) <- plotDat$customer_id
+dat <- select(dat, -customer_id) %>%
+    mutate(recency = as.numeric(recency))
+dis <- dist(scale(dat))
+
+hc <- hclust(dis, method = "ward.D2")
+
+
+## Dendrogram
+plot(hc)
+abline(h = 50, col = "red")
+cuts <- cutree(hc, h = 50)
+segments <- paste0("Segment ", cuts, "\n(n = ", table(cuts)[cuts], ")")
+
+```
+
+## What does each segment look like?
+
+We can make the same plot of Average Purchase Amount as a function of purchase frequency but color by segment.
+
+```{r segmentViz1}
+
+## Plot 2 variables at a time using cuts
+## Shuffle row order to see overlapping points more clearly on plot
+plotDat2 <- plotDat %>%
+    mutate(segment = factor(segments)) %>%
+    arrange(sample(nrow(plotDat)))
+
+## Same plot as before but colored by cluster
+ggplot(data = plotDat2,
+       aes(x = frequency, y = monetary_value, color = segment)) +
+    geom_point() +
+    scale_y_log10(labels = scales::dollar) +
+    annotation_logticks(sides = "l") +
+    xlab("Purchase Frequency") +
+    ylab("Average Purchase Amount") +
+    getBaseTheme()
+
+ggplot(data = plotDat2, aes(x = recency / 365, y = monetary_value, color = segment)) +
+    geom_point() +
+    scale_y_log10(labels = scales::dollar) +
+    annotation_logticks(sides = "l") +
+    xlab("Years Since Last Purchase (Recency)") +
+    ylab("Average Purchase Amount") +
+    getBaseTheme()
+
+```
+
+From the first plot we can see that all segments are clearly separated by these 2 variables except for 1 and 4. Segments 1 and 4 are separated by recency in the second plot.
+
+We can visualize all 3 variables simultaneously in boxplots. This is a bit confusing because of the common scale when we are really showing 3 different things (frequency, dollars, years).
+
+```{r segmentViz2, fig.height = 10}
+
+## Plot all 3 variables in boxplots
+plotDat3 <- plotDat2 %>%
+    mutate(recency = (as.numeric(recency) %/% 365) + 1) %>% # integer division
+    rename(`recency (years)` = recency) %>%
+    gather(key = "RFM_type", value = "value",
+           `recency (years)`, frequency, monetary_value)
+
+ggplot(data = plotDat3, aes(x = RFM_type, y = value, color = segment)) +
+    geom_boxplot(position = "dodge") +
+    scale_y_log10(breaks = c(1, 10, 100, 1000)) +
+    annotation_logticks(sides = "l") +
+    facet_grid(segment ~ .) +
+    getBaseTheme() +
+    scale_color_discrete(guide = FALSE) +
+    theme(strip.text = element_text(size = 12, face = "bold"))
+
+```
+
+# Conclusions
+
+Using hierarchical clustering we were able to define 6 clear customer segments with definining characterstics.
+
+1. **Lost**
+   - These customers shopped at our store 1-5 times over 4 years ago and haven't been back.
+2. **Average Joes**
+   - These customers spend an average amount ($50 per purchase) and shop at an average frequency (4 - 8 transactions)
+3. **Regulars**
+   - These customers are regulars.  They have shopped at least 8 times (some as many as 40 times). They have all made a purchase in the past year though their monetary value varies widely.
+4. **Infrequent**
+   - Customers who have shopped 1 or 2 times in the past 4 years and spend about $20-$30 on average
+5. **Money Makers**
+   - A small segment of 281 customers who have shopped 1-10 times (the majority have shopped in the past year) and spend around $500.
+6. **High Rollers**
+   - The smallest segment of 54 customers who don't shop frequently, but when they shop, they spend over $1,000 on average.
