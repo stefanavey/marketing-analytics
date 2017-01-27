@@ -1,0 +1,228 @@
+---
+title: "Foundations of Marketing Analytics: Module 1: Statistical Segmentation"
+author: "Stefan Avey"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    df_print: kable
+---
+
+
+```{r setup, eval = TRUE, echo = FALSE, message = FALSE, warning = FALSE}
+
+library(tidyverse)
+library(lubridate)
+library(aveytoolkit)
+
+options(stringsAsFactors = FALSE)
+```
+
+# Load the Data
+
+```{r loadData}
+
+###############
+## Load data ##
+###############
+purchases <- read.delim("data/purchases.txt", header = FALSE)
+
+###################
+## Preprocessing ##
+###################
+## Add column names
+colnames(purchases) <- c("customer_id", "purchase_amount", "date_of_purchase")
+
+## Convert date and add column for purchase year
+purchases <- purchases %>%
+    mutate(date_of_purchase = ymd(date_of_purchase)) %>%
+    mutate(year_of_purchase = year(date_of_purchase))
+
+## Look at the data
+head(purchases)
+summary(purchases)
+
+```
+
+# Compute Recency, Frequency, and Monetary Value
+
+Three common characteristics of customers readily available from a transactional database are recency, frequency, and monetary value.
+
+1. *Recency*: Time since last purchase.
+2. *Frequency*: Number of purchases made in the past.
+3. *Monetary value*: Amount spent at each purchase occasion.
+
+Here we use these 3 simple characteristics to divide customers into actionable segments.
+
+```{r calcRFM}
+
+## Add columns for recency, frequency, and monetary value
+startDate <- as.Date("2016-01-01")
+customers_2015 <- purchases %>%
+    group_by(customer_id) %>%
+    summarize(recency = min(startDate - date_of_purchase),
+              first_purchase = max(startDate - date_of_purchase),
+              frequency = n(),
+              monetary_value = mean(purchase_amount))
+```
+
+## Managerial Segmentation
+
+In many cases, statistical segmentation explored in the Week 2 Recital is not used because the segments are not stable and it requires constant updating on the whole data set.  Managerial segmentation uses fixed rules and only new purchase data needs to be used to update segments rather than the whole data set.
+
+```{r segment}
+
+##########################################
+## Simple segmentation on recency alone ##
+##########################################
+seg1 <- customers_2015 %>%
+    mutate(segment = ifelse(recency < 365, "active", "cold"))
+## How many customers are in each group?
+table(seg1$segment)
+
+## Median of recency, frequency, monetary_value within each group
+seg1 %>%
+    select(-customer_id) %>%
+    group_by(segment) %>%
+    mutate(recency = as.numeric(recency)) %>%
+    summarize_each(funs(median(.)))
+
+###############################################
+## Multiple Segmentation using Recency Only  ##
+###############################################
+seg2 <- customers_2015 %>%
+    mutate(recency = as.numeric(recency)) %>%
+    mutate(segment = cut(recency, breaks = c(Inf, 365 * 3:1, -1),
+                         labels = c("active", "warm", "cold", "inactive")))
+
+seg2 %>%
+    select(-customer_id) %>%
+    group_by(segment) %>%
+    mutate(recency = as.numeric(recency)) %>%
+    summarize_each(funs(median(.)))
+
+####################################################
+## Multiple Segmentation using Multiple Variables ##
+####################################################
+segLevels <- c("inactive", "cold", "warm high value", "warm low value",
+               "new warm", "active high value", "active low value", "new active")
+## In original analysis "new warm" and "new active" were not defined with the same
+## criteria. Warm was within 2 years but active within 1 year. I think calling someone
+## new should be consistent no matter when they last purchased so I chose 1 year.
+seg2015 <- customers_2015 %>%
+    mutate(recency = as.numeric(recency),
+           first_purchase = as.numeric(first_purchase)) %>%
+    mutate(high_value = monetary_value >= 100) %>%
+    mutate(new = first_purchase <= 365) %>%
+    mutate(segment = cut(recency, breaks = c(Inf, 365 * 3:1, -1),
+                         labels = c("active", "warm", "cold", "inactive"))) %>%
+    mutate(segment = as.character(segment)) %>%
+    mutate(segment = ifelse( (segment == "warm" | segment == "active") & new,
+                            paste("new", segment), segment)) %>%
+    mutate(segment = ifelse( (segment == "warm" | segment == "active") & !high_value,
+                            paste(segment, "low value"), segment)) %>%
+    mutate(segment = ifelse( (segment == "warm" | segment == "active") & high_value,
+                            paste(segment, "high value"), segment)) %>%
+    mutate(segment = factor(segment, levels = segLevels))
+
+## Show each segment
+table(seg2015$segment)
+seg2015Res <- seg2015 %>%
+    select(-high_value, -new) %>%
+    group_by(segment) %>%
+    summarize_each(funs(median(.))) %>%
+    as.data.frame()
+seg2015Res
+
+```
+
+## Retrospective segmentation
+
+If we go back in time, we can repeat the same analysis but using a different start date.
+
+```{r retroSegment}
+
+## Create new data frame of what we would have had up to the end of 2014
+startDate <- as.Date("2014-12-31")
+customers_2014 <- purchases %>%
+    filter(date_of_purchase <= startDate) %>%
+    group_by(customer_id) %>%
+    summarize(recency = min(startDate - date_of_purchase),
+              first_purchase = max(startDate - date_of_purchase),
+              frequency = n(),
+              monetary_value = mean(purchase_amount))
+
+
+####################################################
+## Multiple Segmentation using Multiple Variables ##
+####################################################
+segLevels <- c("inactive", "cold", "warm high value", "warm low value",
+               "new warm", "active high value", "active low value", "new active")
+seg2014 <- customers_2014 %>%
+    mutate(recency = as.numeric(recency),
+           first_purchase = as.numeric(first_purchase)) %>%
+    mutate(high_value = monetary_value >= 100) %>%
+    mutate(new = first_purchase <= 365) %>%
+    mutate(segment = cut(recency, breaks = c(Inf, 365 * 3:1, -1),
+                         labels = c("active", "warm", "cold", "inactive"))) %>%
+    mutate(segment = as.character(segment)) %>%
+    mutate(segment = ifelse( (segment == "warm" | segment == "active") & new,
+                            paste("new", segment), segment)) %>%
+    mutate(segment = ifelse( (segment == "warm" | segment == "active") & !high_value,
+                            paste(segment, "low value"), segment)) %>%
+    mutate(segment = ifelse( (segment == "warm" | segment == "active") & high_value,
+                            paste(segment, "high value"), segment)) %>%
+    mutate(segment = factor(segment, levels = segLevels))
+
+## Show each segment
+table(seg2014$segment)
+seg2014Res <- seg2014 %>%
+    select(-high_value, -new) %>%
+    group_by(segment) %>%
+    summarize_each(funs(median(.))) %>%
+    as.data.frame()
+seg2014Res
+
+```
+
+## Revenue Generation by Segment
+
+Now that we've defined segments, we can explore which segments are generating revenue.
+
+```{r revenue}
+
+## Create data frame to hold revenue and join in full segmentation from 2015
+revenue <- purchases %>%
+    group_by(customer_id) %>%
+    summarize(revenue = sum(purchase_amount[year_of_purchase == 2015])) %>%
+    full_join(seg2015)
+
+revenue %>%
+    group_by(segment) %>%
+    select(segment, revenue) %>%
+    summarize(mean(revenue))
+
+## How much money did we get in 2015 based on the segments from 2014?
+revenue <- purchases %>%
+    group_by(customer_id) %>%
+    summarize(revenue = sum(purchase_amount[year_of_purchase == 2015])) %>%
+    full_join(seg2014)
+
+plotDat <- revenue %>%
+    group_by(segment) %>%
+    select(segment, revenue) %>%
+    summarize(revenue_avg = mean(revenue)) %>%
+    arrange(-revenue_avg)
+
+
+ggplot(data = plotDat) +
+    geom_bar(stat = "identity", aes(x = factor(segment, levels = plotDat$segment),
+                                    y = revenue_avg)) +
+    xlab("Segment") +
+    ylab("Revenue") +
+    getBaseTheme() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
